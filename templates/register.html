@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Register - RadioML AMC{% endblock %}
+{% block auth_content %}
+<div class="auth-page">
+    <div class="floating-shapes">
+        <div class="shape" style="width:400px;height:400px;background:#6366f1;top:-100px;left:-100px;"></div>
+        <div class="shape" style="width:300px;height:300px;background:#0ea5e9;bottom:-50px;right:-50px;animation-delay:3s;"></div>
+    </div>
+    <div class="auth-card position-relative" style="z-index:1;">
+        <div class="text-center mb-4">
+            <i class="bi bi-person-plus" style="font-size:3rem;color:#818cf8;"></i>
+            <div class="auth-title mt-2">Create Account</div>
+            <div class="auth-subtitle">RadioML AMC Platform</div>
+        </div>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}{% for cat, msg in messages %}
+            <div class="alert alert-{{ cat }} py-2 mb-3" style="font-size:0.8rem;">{{ msg }}</div>
+            {% endfor %}{% endif %}
+        {% endwith %}
+        <form method="POST">
+            <div class="mb-3">
+                <label class="form-label">Username</label>
+                <input type="text" name="username" class="form-control" placeholder="Choose a username" required>
+            </div>
+            <div class="mb-4">
+                <label class="form-label">Password</label>
+                <input type="password" name="password" class="form-control" placeholder="Choose a password" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">
+                <i class="bi bi-person-check me-2"></i>Register
+            </button>
+        </form>
+        <div class="text-center mt-3">
+            <a href="{{ url_for('login') }}" style="color:rgba(255,255,255,0.5);font-size:0.85rem;text-decoration:none;">
+                Already have an account? <span style="color:#818cf8;">Login</span>
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

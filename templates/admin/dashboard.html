@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard{% endblock %}
+{% block page_title %}Admin Dashboard{% endblock %}
+{% block content %}
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="stat-card bg-gradient-primary">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="stat-label">Datasets</div>
+                    <div class="stat-value">{{ stats.datasets }}</div>
+                </div>
+                <i class="bi bi-database stat-icon"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card bg-gradient-info">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="stat-label">Models</div>
+                    <div class="stat-value">{{ stats.models }}</div>
+                </div>
+                <i class="bi bi-cpu stat-icon"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card bg-gradient-success">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="stat-label">Users</div>
+                    <div class="stat-value">{{ stats.users }}</div>
+                </div>
+                <i class="bi bi-people stat-icon"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card bg-gradient-warning">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="stat-label">Predictions</div>
+                    <div class="stat-value">{{ stats.predictions }}</div>
+                </div>
+                <i class="bi bi-lightning stat-icon"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex align-items-center gap-2">
+                <i class="bi bi-grid text-primary"></i> Quick Actions
+            </div>
+            <div class="card-body">
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="{{ url_for('admin_upload_dataset') }}" class="btn btn-primary btn-sm">
+                        <i class="bi bi-cloud-upload me-1"></i> Upload Dataset
+                    </a>
+                    <a href="{{ url_for('admin_train') }}" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-cpu me-1"></i> Train Model
+                    </a>
+                    <a href="{{ url_for('admin_datasets') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-database me-1"></i> View Datasets
+                    </a>
+                    <a href="{{ url_for('admin_models') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-collection me-1"></i> View Models
+                    </a>
+                    <a href="{{ url_for('admin_users') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-people me-1"></i> Manage Users
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header d-flex align-items-center gap-2">
+                <i class="bi bi-database text-primary"></i> Recent Datasets
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table mb-0">
+                        <thead class="table-light">
+                            <tr><th>Name</th><th>Samples</th><th>Status</th><th>Actions</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for ds in recent_datasets %}
+                            <tr>
+                                <td>{{ ds.name }}</td>
+                                <td>{{ "{:,}".format(ds.samples or 0) }}</td>
+                                <td>
+                                    <span class="badge bg-{% if ds.status == 'preprocessed' %}success{% else %}warning text-dark{% endif %}">
+                                        {{ ds.status }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('admin_visualize', did=ds.id) }}" class="btn btn-sm btn-outline-primary py-0">
+                                        <i class="bi bi-bar-chart"></i>
+                                    </a>
+                                    <a href="{{ url_for('admin_preprocess', did=ds.id) }}" class="btn btn-sm btn-outline-secondary py-0">
+                                        <i class="bi bi-gear"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="4" class="text-center text-muted py-3">No datasets yet</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header d-flex align-items-center gap-2">
+                <i class="bi bi-cpu text-primary"></i> Recent Models
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table mb-0">
+                        <thead class="table-light">
+                            <tr><th>Name</th><th>Architecture</th><th>Accuracy</th><th>Actions</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for m in recent_models %}
+                            <tr>
+                                <td>{{ m.name }}</td>
+                                <td><span class="badge-mod">{{ m.architecture }}</span></td>
+                                <td>
+                                    {% if m.accuracy %}
+                                    <span class="text-success fw-bold">{{ "%.1f"|format(m.accuracy * 100) }}%</span>
+                                    {% else %}-{% endif %}
+                                </td>
+                                <td>
+                                    {% if m.status == 'ready' %}
+                                    <a href="{{ url_for('admin_evaluate', mid=m.id) }}" class="btn btn-sm btn-outline-primary py-0">
+                                        <i class="bi bi-graph-up"></i>
+                                    </a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="4" class="text-center text-muted py-3">No models yet</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- About Dataset -->
+<div class="row g-3 mt-1">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex align-items-center gap-2">
+                <i class="bi bi-info-circle text-primary"></i> About RadioML 2016.10A Dataset
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div style="background:#f8fafc;border-radius:10px;padding:1rem;">
+                            <div style="font-size:0.75rem;color:#64748b;font-weight:600;text-transform:uppercase;">Dataset Info</div>
+                            <div class="mt-2" style="font-size:0.85rem;">
+                                <div class="d-flex justify-content-between py-1 border-bottom"><span>Format</span><strong>Pickle (.pkl)</strong></div>
+                                <div class="d-flex justify-content-between py-1 border-bottom"><span>Signal Shape</span><strong>(2, 128)</strong></div>
+                                <div class="d-flex justify-content-between py-1 border-bottom"><span>Classes</span><strong>11 Modulations</strong></div>
+                                <div class="d-flex justify-content-between py-1"><span>SNR Range</span><strong>-20 to +18 dB</strong></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div style="background:#f8fafc;border-radius:10px;padding:1rem;">
+                            <div style="font-size:0.75rem;color:#64748b;font-weight:600;text-transform:uppercase;">Digital Modulations</div>
+                            <div class="mt-2 d-flex flex-wrap gap-1">
+                                {% for m in ['BPSK','QPSK','8PSK','PAM4','QAM16','QAM64','CPFSK','GFSK'] %}
+                                <span class="badge-mod">{{ m }}</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div style="background:#f8fafc;border-radius:10px;padding:1rem;">
+                            <div style="font-size:0.75rem;color:#64748b;font-weight:600;text-transform:uppercase;">Analog Modulations</div>
+                            <div class="mt-2 d-flex flex-wrap gap-1">
+                                {% for m in ['AM-DSB','AM-SSB','WBFM'] %}
+                                <span class="badge-mod" style="background:#dcfce7;color:#16a34a;">{{ m }}</span>
+                                {% endfor %}
+                            </div>
+                            <div class="mt-2" style="font-size:0.75rem;color:#64748b;">Generated via GNU Radio simulation</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}RadioML AMC{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #0ea5e9;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --dark: #0f172a;
+            --sidebar-bg: #1e293b;
+            --sidebar-width: 260px;
+            --card-bg: #ffffff;
+            --bg: #f1f5f9;
+            --text: #334155;
+            --border: #e2e8f0;
+        }
+        * { font-family: 'Inter', sans-serif; }
+        body { background: var(--bg); color: var(--text); }
+        
+        /* Sidebar */
+        .sidebar {
+            width: var(--sidebar-width);
+            min-height: 100vh;
+            background: var(--sidebar-bg);
+            position: fixed;
+            top: 0; left: 0;
+            z-index: 1000;
+            transition: all 0.3s;
+            overflow-y: auto;
+        }
+        .sidebar-brand {
+            padding: 1.5rem;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .sidebar-brand h5 {
+            color: #fff;
+            font-weight: 700;
+            font-size: 1.1rem;
+            margin: 0;
+        }
+        .sidebar-brand span {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-size: 1.3rem;
+        }
+        .sidebar-nav { padding: 1rem 0; }
+        .nav-section-title {
+            color: rgba(255,255,255,0.4);
+            font-size: 0.65rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            padding: 0.5rem 1.5rem 0.25rem;
+        }
+        .nav-link-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.6rem 1.5rem;
+            color: rgba(255,255,255,0.65);
+            text-decoration: none;
+            border-left: 3px solid transparent;
+            transition: all 0.2s;
+            font-size: 0.875rem;
+        }
+        .nav-link-item:hover, .nav-link-item.active {
+            color: #fff;
+            background: rgba(255,255,255,0.08);
+            border-left-color: var(--primary);
+        }
+        .nav-link-item i { font-size: 1rem; width: 1.2rem; }
+        
+        /* Main content */
+        .main-content {
+            margin-left: var(--sidebar-width);
+            min-height: 100vh;
+        }
+        .topbar {
+            background: #fff;
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 900;
+        }
+        .topbar-title { font-weight: 600; font-size: 1.1rem; color: var(--dark); }
+        .user-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+        }
+        .avatar {
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.85rem;
+        }
+        .page-content { padding: 1.5rem; }
+        
+        /* Cards */
+        .card {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .card-header {
+            background: transparent;
+            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+            font-size: 0.95rem;
+            padding: 1rem 1.25rem;
+        }
+        
+        /* Stat cards */
+        .stat-card {
+            border-radius: 12px;
+            padding: 1.25rem;
+            color: #fff;
+            position: relative;
+            overflow: hidden;
+        }
+        .stat-card::after {
+            content: '';
+            position: absolute;
+            right: -20px; top: -20px;
+            width: 100px; height: 100px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.1);
+        }
+        .stat-card .stat-icon {
+            font-size: 2rem;
+            opacity: 0.85;
+        }
+        .stat-card .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+        .stat-card .stat-label {
+            font-size: 0.8rem;
+            opacity: 0.85;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .bg-gradient-primary { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
+        .bg-gradient-info { background: linear-gradient(135deg, #0ea5e9, #06b6d4); }
+        .bg-gradient-success { background: linear-gradient(135deg, #10b981, #059669); }
+        .bg-gradient-warning { background: linear-gradient(135deg, #f59e0b, #d97706); }
+        
+        /* Buttons */
+        .btn-primary { background: var(--primary); border-color: var(--primary); }
+        .btn-primary:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
+        
+        /* Tables */
+        .table th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; font-weight: 600; }
+        .table td { font-size: 0.875rem; vertical-align: middle; }
+        
+        /* Badges */
+        .badge-mod {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            background: #ede9fe;
+            color: #7c3aed;
+        }
+        
+        /* Alert */
+        .alert { border-radius: 10px; border: none; font-size: 0.875rem; }
+        
+        /* Progress */
+        .progress { border-radius: 20px; height: 8px; }
+        .progress-bar { border-radius: 20px; }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.show { transform: translateX(0); }
+            .main-content { margin-left: 0; }
+        }
+        
+        /* Upload zone */
+        .upload-zone {
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 3rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #f8fafc;
+        }
+        .upload-zone:hover, .upload-zone.drag-over {
+            border-color: var(--primary);
+            background: #ede9fe;
+        }
+        .upload-zone i { font-size: 3rem; color: var(--primary); }
+        
+        /* Chart container */
+        .chart-container { position: relative; min-height: 300px; }
+        
+        /* Prediction result */
+        .pred-result-card {
+            background: linear-gradient(135deg, #1e293b, #334155);
+            border-radius: 16px;
+            color: #fff;
+            padding: 2rem;
+        }
+        .pred-mod-name {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #a5f3fc, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .confidence-ring {
+            width: 120px; height: 120px;
+            border-radius: 50%;
+            background: conic-gradient(var(--primary) 0%, transparent 0%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        .snr-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(255,255,255,0.1);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+        }
+        
+        /* Login page */
+        .auth-page {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 50%, #1e1b4b 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .auth-card {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 20px;
+            padding: 2.5rem;
+            width: 100%;
+            max-width: 420px;
+        }
+        .auth-title {
+            color: #fff;
+            font-size: 1.8rem;
+            font-weight: 800;
+        }
+        .auth-subtitle { color: rgba(255,255,255,0.5); font-size: 0.875rem; }
+        .auth-card .form-control {
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.15);
+            color: #fff;
+            border-radius: 10px;
+            padding: 0.75rem 1rem;
+        }
+        .auth-card .form-control::placeholder { color: rgba(255,255,255,0.3); }
+        .auth-card .form-control:focus {
+            background: rgba(255,255,255,0.1);
+            border-color: var(--primary);
+            color: #fff;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        }
+        .auth-card label { color: rgba(255,255,255,0.7); font-size: 0.85rem; font-weight: 500; }
+        .auth-card .btn-primary { 
+            background: linear-gradient(135deg, var(--primary), #8b5cf6);
+            border: none;
+            padding: 0.75rem;
+            border-radius: 10px;
+            font-weight: 600;
+        }
+        .floating-shapes {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            overflow: hidden;
+        }
+        .shape {
+            position: absolute;
+            border-radius: 50%;
+            opacity: 0.05;
+            animation: float 8s ease-in-out infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(-30px) scale(1.05); }
+        }
+        
+        /* Loader */
+        .loader-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        .loader-overlay.show { display: flex; }
+        .loader-spinner {
+            width: 60px; height: 60px;
+            border: 4px solid rgba(255,255,255,0.2);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+{% if session.get('user_id') %}
+<!-- Sidebar -->
+<nav class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+        <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-broadcast" style="color:#818cf8;font-size:1.5rem;"></i>
+            <div>
+                <h5><span>RadioML</span> AMC</h5>
+                <div style="font-size:0.65rem;color:rgba(255,255,255,0.4);margin-top:-2px;">Modulation Classifier</div>
+            </div>
+        </div>
+    </div>
+    <div class="sidebar-nav">
+        {% if session.get('role') == 'admin' %}
+        <div class="nav-section-title">Admin</div>
+        <a href="{{ url_for('admin_dashboard') }}" class="nav-link-item {% if request.endpoint == 'admin_dashboard' %}active{% endif %}">
+            <i class="bi bi-speedometer2"></i> Dashboard
+        </a>
+        <div class="nav-section-title mt-2">Dataset</div>
+        <a href="{{ url_for('admin_datasets') }}" class="nav-link-item {% if 'dataset' in request.endpoint %}active{% endif %}">
+            <i class="bi bi-database"></i> Manage Datasets
+        </a>
+        <a href="{{ url_for('admin_upload_dataset') }}" class="nav-link-item">
+            <i class="bi bi-cloud-upload"></i> Upload Dataset
+        </a>
+        <div class="nav-section-title mt-2">Model</div>
+        <a href="{{ url_for('admin_train') }}" class="nav-link-item {% if 'train' in request.endpoint %}active{% endif %}">
+            <i class="bi bi-cpu"></i> Train Model
+        </a>
+        <a href="{{ url_for('admin_models') }}" class="nav-link-item {% if request.endpoint == 'admin_models' %}active{% endif %}">
+            <i class="bi bi-collection"></i> Models
+        </a>
+        <div class="nav-section-title mt-2">System</div>
+        <a href="{{ url_for('admin_users') }}" class="nav-link-item {% if 'users' in request.endpoint %}active{% endif %}">
+            <i class="bi bi-people"></i> Users
+        </a>
+        {% else %}
+        <div class="nav-section-title">User</div>
+        <a href="{{ url_for('user_dashboard') }}" class="nav-link-item {% if request.endpoint == 'user_dashboard' %}active{% endif %}">
+            <i class="bi bi-house"></i> Dashboard
+        </a>
+        <a href="{{ url_for('user_predict') }}" class="nav-link-item {% if 'predict' in request.endpoint %}active{% endif %}">
+            <i class="bi bi-lightning"></i> Predict Signal
+        </a>
+        <a href="{{ url_for('user_history') }}" class="nav-link-item {% if 'history' in request.endpoint %}active{% endif %}">
+            <i class="bi bi-clock-history"></i> History
+        </a>
+        {% endif %}
+        <div class="nav-section-title mt-2">Account</div>
+        <a href="{{ url_for('logout') }}" class="nav-link-item">
+            <i class="bi bi-box-arrow-right"></i> Logout
+        </a>
+    </div>
+</nav>
+
+<!-- Main -->
+<div class="main-content">
+    <div class="topbar">
+        <div class="d-flex align-items-center gap-3">
+            <button class="btn btn-sm btn-outline-secondary d-md-none" onclick="toggleSidebar()">
+                <i class="bi bi-list"></i>
+            </button>
+            <span class="topbar-title">{% block page_title %}{% endblock %}</span>
+        </div>
+        <div class="user-badge">
+            <div class="avatar">{{ session.get('username', 'U')[0].upper() }}</div>
+            <div>
+                <div style="font-weight:600;font-size:0.85rem;">{{ session.get('username') }}</div>
+                <div style="font-size:0.7rem;color:#94a3b8;text-transform:capitalize;">{{ session.get('role') }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="page-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for cat, msg in messages %}
+                <div class="alert alert-{{ cat }} alert-dismissible fade show mb-3" role="alert">
+                    <i class="bi bi-{% if cat == 'success' %}check-circle{% elif cat == 'danger' %}x-circle{% else %}info-circle{% endif %} me-2"></i>
+                    {{ msg }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </div>
+</div>
+{% else %}
+{% block auth_content %}{% endblock %}
+{% endif %}
+
+<!-- Loader -->
+<div class="loader-overlay" id="loaderOverlay">
+    <div class="loader-spinner mb-3"></div>
+    <div style="color:#fff;font-weight:500;" id="loaderText">Processing...</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<script>
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('show');
+}
+function showLoader(text='Processing...') {
+    document.getElementById('loaderText').textContent = text;
+    document.getElementById('loaderOverlay').classList.add('show');
+}
+function hideLoader() {
+    document.getElementById('loaderOverlay').classList.remove('show');
+}
+// Chart defaults
+Chart.defaults.font.family = 'Inter';
+Chart.defaults.plugins.legend.labels.padding = 20;
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,337 @@
+{% extends "base.html" %}
+{% block title %}Predict Signal{% endblock %}
+{% block page_title %}Signal Modulation Prediction{% endblock %}
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.26.0/plotly.min.js"></script>
+{% endblock %}
+{% block content %}
+<div class="row g-3">
+    <!-- Left: Input Panel -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header d-flex align-items-center gap-2">
+                <i class="bi bi-sliders text-primary"></i> Prediction Settings
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Select Model</label>
+                    <select class="form-select" id="modelId">
+                        {% if models %}
+                            {% for m in models %}
+                            <option value="{{ m.id }}">{{ m.name }} ({{ m.architecture }})</option>
+                            {% endfor %}
+                        {% else %}
+                        <option value="">No models available</option>
+                        {% endif %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Input Type</label>
+                    <div class="d-flex gap-2">
+                        <div class="input-type-btn active" data-type="file" onclick="setInputType('file')">
+                            <i class="bi bi-upload d-block mb-1" style="font-size:1.2rem;"></i>
+                            Upload File
+                        </div>
+                        <div class="input-type-btn" data-type="generate" onclick="setInputType('generate')">
+                            <i class="bi bi-magic d-block mb-1" style="font-size:1.2rem;"></i>
+                            Generate
+                        </div>
+                    </div>
+                </div>
+
+                <!-- File upload section -->
+                <div id="fileSection">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Signal File</label>
+                        <div class="upload-zone p-3" id="sigUploadZone" onclick="document.getElementById('sigFile').click()">
+                            <i class="bi bi-file-earmark-waveform" style="font-size:2rem;margin-bottom:0.5rem;"></i>
+                            <div style="font-size:0.85rem;">Click to upload signal</div>
+                            <div style="font-size:0.75rem;color:#94a3b8;" class="mt-1">
+                                .pkl, .npy, .csv, .txt
+                            </div>
+                            <div id="sigFileInfo" style="display:none;" class="mt-2">
+                                <span class="badge bg-success" id="sigFileNameBadge"></span>
+                            </div>
+                        </div>
+                        <input type="file" id="sigFile" accept=".pkl,.pickle,.npy,.csv,.txt" style="display:none;" onchange="onSigFileChange()">
+                    </div>
+                    <div class="alert alert-info" style="font-size:0.78rem;padding:0.6rem;">
+                        <strong>Supported formats:</strong><br>
+                        • <code>.pkl</code> - RadioML dict or numpy array<br>
+                        • <code>.npy</code> - NumPy array (shape: N×2×128)<br>
+                        • <code>.csv</code> - I,Q values (256 columns)<br>
+                        • <code>.txt</code> - Space-separated I+Q values
+                    </div>
+                </div>
+
+                <!-- Generate section -->
+                <div id="generateSection" style="display:none;">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Modulation Type</label>
+                        <select class="form-select" id="modClass">
+                            {% for m in modulations %}
+                            <option value="{{ m }}">{{ m }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">SNR: <span id="snrVal">0</span> dB</label>
+                        <input type="range" class="form-range" id="snrSlider" min="-20" max="18" step="2" value="0"
+                               oninput="document.getElementById('snrVal').textContent=this.value">
+                        <div class="d-flex justify-content-between" style="font-size:0.7rem;color:#94a3b8;">
+                            <span>-20 dB (noisy)</span>
+                            <span>+18 dB (clean)</span>
+                        </div>
+                    </div>
+                    <div class="alert alert-info" style="font-size:0.78rem;padding:0.6rem;">
+                        Generates a synthetic I/Q signal of the selected modulation type at the given SNR level using NumPy simulation.
+                    </div>
+                </div>
+
+                <button class="btn btn-primary w-100" id="predictBtn" onclick="runPrediction()">
+                    <i class="bi bi-lightning me-2"></i>Classify Signal
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right: Results Panel -->
+    <div class="col-md-8">
+        <!-- Empty state -->
+        <div id="emptyResult" class="card">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-broadcast" style="font-size:4rem;color:#cbd5e1;"></i>
+                <h5 class="mt-3 text-muted">Ready to Classify</h5>
+                <p class="text-muted">Upload a signal file or generate a synthetic signal, then click "Classify Signal".</p>
+                <div class="row g-2 mt-3 text-start" style="max-width:400px;margin:0 auto;">
+                    {% for fmt, desc in [
+                        ('.pkl', 'RadioML pickle — dict with (mod,snr) keys or numpy array'),
+                        ('.npy', 'NumPy array — shape (N, 2, 128) or (2, 128)'),
+                        ('.csv', 'CSV — 256 columns: first 128 = I, last 128 = Q'),
+                        ('.txt', 'Text — 256 values: first 128 = I, last 128 = Q')
+                    ] %}
+                    <div class="col-12">
+                        <div style="background:#f8fafc;border-radius:8px;padding:0.5rem 0.75rem;font-size:0.8rem;display:flex;gap:0.75rem;">
+                            <code style="color:#6366f1;flex-shrink:0;">{{ fmt }}</code>
+                            <span style="color:#64748b;">{{ desc }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Prediction result -->
+        <div id="resultPanel" style="display:none;">
+            <div class="pred-result-card mb-3">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                    <div>
+                        <div style="font-size:0.75rem;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.1em;">
+                            Predicted Modulation
+                        </div>
+                        <div class="pred-mod-name" id="predMod">-</div>
+                        <div class="d-flex gap-2 mt-1 flex-wrap">
+                            <span class="snr-badge" id="predSNR"><i class="bi bi-soundwave me-1"></i>SNR</span>
+                            <span class="snr-badge" id="predConf"><i class="bi bi-check-circle me-1"></i>Confidence</span>
+                        </div>
+                    </div>
+                    <div style="position:relative;">
+                        <canvas id="confGauge" width="120" height="120"></canvas>
+                        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;">
+                            <div style="font-size:1.4rem;font-weight:800;color:#fff;" id="confPct">-</div>
+                            <div style="font-size:0.6rem;color:rgba(255,255,255,0.5);">CONF</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-3">
+                <!-- IQ Plot -->
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">I/Q Time Domain Signal</div>
+                        <div class="card-body"><div id="iqPlot" style="height:250px;"></div></div>
+                    </div>
+                </div>
+                <!-- Probabilities -->
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">Class Probabilities</div>
+                        <div class="card-body"><div id="probChart" style="height:250px;"></div></div>
+                    </div>
+                </div>
+                <!-- Constellation -->
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">Constellation Diagram (I vs Q)</div>
+                        <div class="card-body"><div id="constPlot" style="height:280px;"></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let currentInputType = 'file';
+let confGaugeCtx = null;
+let confGaugeChart = null;
+
+// Styles
+document.head.insertAdjacentHTML('beforeend', `<style>
+.input-type-btn {
+    flex:1; text-align:center; padding:0.75rem 0.5rem;
+    border:2px solid var(--border); border-radius:10px;
+    cursor:pointer; font-size:0.8rem; font-weight:600;
+    color:#64748b; transition:all 0.2s;
+}
+.input-type-btn:hover { border-color:var(--primary); color:var(--primary); }
+.input-type-btn.active { border-color:var(--primary); background:#ede9fe; color:var(--primary); }
+</style>`);
+
+function setInputType(type) {
+    currentInputType = type;
+    document.querySelectorAll('.input-type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === type));
+    document.getElementById('fileSection').style.display = type === 'file' ? 'block' : 'none';
+    document.getElementById('generateSection').style.display = type === 'generate' ? 'block' : 'none';
+}
+
+function onSigFileChange() {
+    const f = document.getElementById('sigFile').files[0];
+    if (f) {
+        document.getElementById('sigFileNameBadge').textContent = `${f.name} (${(f.size/1024).toFixed(1)} KB)`;
+        document.getElementById('sigFileInfo').style.display = 'block';
+    }
+}
+
+['dragover','dragenter'].forEach(e => document.getElementById('sigUploadZone').addEventListener(e, ev => {
+    ev.preventDefault(); document.getElementById('sigUploadZone').classList.add('drag-over');
+}));
+['dragleave','drop'].forEach(e => document.getElementById('sigUploadZone').addEventListener(e, ev => {
+    ev.preventDefault(); document.getElementById('sigUploadZone').classList.remove('drag-over');
+    if (e === 'drop' && ev.dataTransfer.files[0]) {
+        document.getElementById('sigFile').files = ev.dataTransfer.files;
+        onSigFileChange();
+    }
+}));
+
+function runPrediction() {
+    const modelId = document.getElementById('modelId').value;
+    if (!modelId) { alert('Please select a model!'); return; }
+
+    const btn = document.getElementById('predictBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Classifying...';
+
+    const formData = new FormData();
+    formData.append('model_id', modelId);
+    formData.append('input_type', currentInputType);
+
+    if (currentInputType === 'file') {
+        const f = document.getElementById('sigFile').files[0];
+        if (!f) {
+            alert('Please select a signal file!');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-lightning me-2"></i>Classify Signal';
+            return;
+        }
+        formData.append('signal_file', f);
+        formData.append('snr', 0);
+    } else {
+        formData.append('mod_class', document.getElementById('modClass').value);
+        formData.append('snr', document.getElementById('snrSlider').value);
+    }
+
+    fetch('/user/predict/run', { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-lightning me-2"></i>Classify Signal';
+            if (data.error) { alert('Error: ' + data.error); return; }
+            showResults(data);
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-lightning me-2"></i>Classify Signal';
+            alert('Prediction failed: ' + err);
+        });
+}
+
+function showResults(data) {
+    document.getElementById('emptyResult').style.display = 'none';
+    document.getElementById('resultPanel').style.display = 'block';
+
+    document.getElementById('predMod').textContent = data.prediction;
+    document.getElementById('predSNR').innerHTML = `<i class="bi bi-soundwave me-1"></i>${data.snr} dB`;
+    document.getElementById('predConf').innerHTML = `<i class="bi bi-check-circle me-1"></i>${data.confidence}% confident`;
+    document.getElementById('confPct').textContent = data.confidence + '%';
+
+    // Gauge
+    if (confGaugeChart) confGaugeChart.destroy();
+    confGaugeCtx = document.getElementById('confGauge').getContext('2d');
+    const conf = data.confidence / 100;
+    const color = conf > 0.8 ? '#10b981' : conf > 0.5 ? '#f59e0b' : '#ef4444';
+    confGaugeChart = new Chart(confGaugeCtx, {
+        type: 'doughnut',
+        data: {
+            datasets: [{
+                data: [data.confidence, 100 - data.confidence],
+                backgroundColor: [color, 'rgba(255,255,255,0.1)'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            cutout: '75%', plugins: {legend:{display:false},tooltip:{enabled:false}},
+            animation: {duration: 800}
+        }
+    });
+
+    // IQ Plot
+    const t = Array.from({length:128}, (_,i) => i);
+    Plotly.newPlot('iqPlot', [
+        {x:t, y:data.iq_I, name:'I', line:{color:'#6366f1',width:2}, type:'scatter'},
+        {x:t, y:data.iq_Q, name:'Q', line:{color:'#0ea5e9',width:2}, type:'scatter'}
+    ], {
+        margin:{t:5,r:10,b:35,l:45},
+        xaxis:{title:'Sample'}, yaxis:{title:'Amplitude'},
+        legend:{orientation:'h',y:-0.2},
+        paper_bgcolor:'transparent', plot_bgcolor:'transparent'
+    }, {responsive:true, displayModeBar:false});
+
+    // Probability bar chart
+    const probs = data.probabilities;
+    const mods = Object.keys(probs).sort((a,b) => probs[b]-probs[a]);
+    const vals = mods.map(m => probs[m]);
+    const barColors = mods.map(m => m === data.prediction ? '#10b981' : '#6366f1');
+
+    Plotly.newPlot('probChart', [{
+        x: vals, y: mods, type:'bar', orientation:'h',
+        marker:{color:barColors, opacity:0.85},
+        hovertemplate:'<b>%{y}</b>: %{x:.1f}%<extra></extra>'
+    }], {
+        margin:{t:5,r:20,b:35,l:65},
+        xaxis:{title:'Probability (%)',range:[0,100]},
+        paper_bgcolor:'transparent', plot_bgcolor:'transparent'
+    }, {responsive:true, displayModeBar:false});
+
+    // Constellation
+    Plotly.newPlot('constPlot', [{
+        x: data.iq_I, y: data.iq_Q, mode:'markers',
+        marker:{color:'#6366f1',size:6,opacity:0.75,
+                line:{color:'#4f46e5',width:1}},
+        type:'scatter',
+        hovertemplate:'I: %{x:.3f}<br>Q: %{y:.3f}<extra></extra>'
+    }], {
+        margin:{t:5,r:10,b:45,l:55},
+        xaxis:{title:'In-phase (I)',zeroline:true,zerolinecolor:'#e2e8f0'},
+        yaxis:{title:'Quadrature (Q)',zeroline:true,zerolinecolor:'#e2e8f0'},
+        paper_bgcolor:'transparent', plot_bgcolor:'transparent'
+    }, {responsive:true, displayModeBar:false});
+
+    // Scroll to results
+    document.getElementById('resultPanel').scrollIntoView({behavior:'smooth'});
+}
+</script>
+{% endblock %}

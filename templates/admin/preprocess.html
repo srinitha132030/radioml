@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}Preprocess Dataset{% endblock %}
+{% block page_title %}Preprocess Dataset{% endblock %}
+{% block content %}
+<div class="row g-3">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header d-flex align-items-center gap-2">
+                <i class="bi bi-database text-primary"></i> Dataset Info
+            </div>
+            <div class="card-body">
+                <div class="text-center mb-3">
+                    <div style="font-size:4rem;">📦</div>
+                    <h5 class="fw-bold">{{ dataset.name }}</h5>
+                    <span class="badge bg-{% if dataset.status == 'preprocessed' %}success{% else %}warning text-dark{% endif %}">
+                        {{ dataset.status }}
+                    </span>
+                </div>
+                <div style="font-size:0.85rem;">
+                    <div class="d-flex justify-content-between py-2 border-bottom">
+                        <span class="text-muted">File</span>
+                        <strong style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ dataset.filename }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between py-2 border-bottom">
+                        <span class="text-muted">Size</span>
+                        <strong>{{ "%.1f"|format((dataset.size or 0)/1024/1024) }} MB</strong>
+                    </div>
+                    <div class="d-flex justify-content-between py-2">
+                        <span class="text-muted">Samples</span>
+                        <strong>{{ "{:,}".format(dataset.samples or 0) }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header d-flex align-items-center gap-2">
+                <i class="bi bi-gear text-primary"></i> Preprocessing Steps
+            </div>
+            <div class="card-body">
+                <div class="d-flex flex-column gap-2">
+                    {% for step in [
+                        ('Parse pickle file', 'bi-file-earmark-binary'),
+                        ('Extract I/Q samples', 'bi-layers'),
+                        ('Detect modulation classes', 'bi-tags'),
+                        ('Identify SNR levels', 'bi-soundwave'),
+                        ('Analyze signal statistics', 'bi-bar-chart'),
+                        ('Validate data integrity', 'bi-shield-check')
+                    ] %}
+                    <div class="d-flex align-items-center gap-2 step-item" style="font-size:0.85rem;">
+                        <i class="bi {{ step[1] }} text-primary"></i>
+                        <span>{{ step[0] }}</span>
+                        <i class="bi bi-circle ms-auto step-status" style="color:#cbd5e1;font-size:0.7rem;"></i>
+                    </div>
+                    {% endfor %}
+                </div>
+                <button class="btn btn-primary w-100 mt-3" id="preprocessBtn" onclick="runPreprocess()">
+                    <i class="bi bi-play-circle me-2"></i>Run Preprocessing
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="card h-100">
+            <div class="card-header d-flex align-items-center gap-2">
+                <i class="bi bi-terminal text-primary"></i> Preprocessing Results
+            </div>
+            <div class="card-body" id="resultsArea">
+                <div class="text-center py-5 text-muted" id="emptyState">
+                    <i class="bi bi-play-circle" style="font-size:3rem;color:#cbd5e1;"></i>
+                    <h6 class="mt-3">Click "Run Preprocessing" to analyze the dataset</h6>
+                </div>
+                <div id="resultsContent" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function runPreprocess() {
+    const btn = document.getElementById('preprocessBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processing...';
+    document.getElementById('emptyState').style.display = 'none';
+
+    // Animate steps
+    const steps = document.querySelectorAll('.step-item');
+    let i = 0;
+    const interval = setInterval(() => {
+        if (i < steps.length) {
+            const icon = steps[i].querySelector('.step-status');
+            icon.className = 'bi bi-check-circle-fill ms-auto step-status';
+            icon.style.color = '#10b981';
+            i++;
+        } else {
+            clearInterval(interval);
+        }
+    }, 400);
+
+    fetch('/admin/preprocess/run/{{ dataset.id }}', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Preprocessed!';
+            btn.className = 'btn btn-success w-100 mt-3';
+
+            if (data.status === 'success') {
+                document.getElementById('resultsContent').style.display = 'block';
+                document.getElementById('resultsContent').innerHTML = `
+                    <div class="alert alert-success mb-4">
+                        <i class="bi bi-check-circle-fill me-2"></i><strong>${data.message}</strong>
+                    </div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-3">
+                            <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border-radius:12px;padding:1rem;text-align:center;">
+                                <div style="font-size:1.5rem;font-weight:800;">${data.total_samples.toLocaleString()}</div>
+                                <div style="font-size:0.75rem;opacity:0.85;">Total Samples</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div style="background:linear-gradient(135deg,#0ea5e9,#06b6d4);color:#fff;border-radius:12px;padding:1rem;text-align:center;">
+                                <div style="font-size:1.5rem;font-weight:800;">${data.modulations.length}</div>
+                                <div style="font-size:0.75rem;opacity:0.85;">Modulations</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div style="background:linear-gradient(135deg,#10b981,#059669);color:#fff;border-radius:12px;padding:1rem;text-align:center;">
+                                <div style="font-size:1.5rem;font-weight:800;">${data.snr_levels.length}</div>
+                                <div style="font-size:0.75rem;opacity:0.85;">SNR Levels</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border-radius:12px;padding:1rem;text-align:center;">
+                                <div style="font-size:1.5rem;font-weight:800;">${data.sample_shape.join('×')}</div>
+                                <div style="font-size:0.75rem;opacity:0.85;">Sample Shape</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <h6 class="fw-semibold">Modulation Classes</h6>
+                            <div class="d-flex flex-wrap gap-1">
+                                ${data.modulations.map(m => `<span class="badge-mod">${m}</span>`).join('')}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="fw-semibold">SNR Levels (dB)</h6>
+                            <div class="d-flex flex-wrap gap-1">
+                                ${data.snr_levels.map(s => `<span class="badge bg-secondary bg-opacity-10 text-secondary" style="font-size:0.7rem;">${s}dB</span>`).join('')}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-3 d-flex gap-2">
+                        <a href="/admin/visualize/{{ dataset.id }}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-bar-chart me-1"></i>Visualize Dataset
+                        </a>
+                        <a href="/admin/train" class="btn btn-primary btn-sm">
+                            <i class="bi bi-cpu me-1"></i>Train Model
+                        </a>
+                    </div>
+                `;
+            } else {
+                document.getElementById('resultsContent').style.display = 'block';
+                document.getElementById('resultsContent').innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-x-circle me-2"></i><strong>Error:</strong> ${data.message}
+                        <div class="mt-2 small">Make sure this is a valid RadioML 2016.10A pickle file.</div>
+                    </div>
+                `;
+            }
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-play-circle me-2"></i>Run Preprocessing';
+        });
+}
+</script>
+{% endblock %}

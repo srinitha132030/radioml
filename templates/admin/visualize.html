@@ -1,0 +1,333 @@
+{% extends "base.html" %}
+{% block title %}Visualize Dataset{% endblock %}
+{% block page_title %}Dataset Visualization{% endblock %}
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.26.0/plotly.min.js"></script>
+{% endblock %}
+{% block content %}
+<div class="mb-3">
+    <div class="d-flex align-items-center gap-3">
+        <h5 class="mb-0 fw-bold">{{ dataset.name }}</h5>
+        <span class="badge bg-primary">ID: {{ dataset.id }}</span>
+        <a href="{{ url_for('admin_datasets') }}" class="btn btn-sm btn-outline-secondary ms-auto">
+            <i class="bi bi-arrow-left me-1"></i>Back
+        </a>
+    </div>
+</div>
+
+<div id="loadingState" class="text-center py-5">
+    <div class="spinner-border text-primary mb-3" style="width:3rem;height:3rem;"></div>
+    <h6 class="text-muted">Loading dataset for visualization...</h6>
+</div>
+
+<div id="vizContent" style="display:none;">
+    <!-- Tabs -->
+    <ul class="nav nav-pills mb-4 gap-1" id="vizTabs">
+        <li class="nav-item"><button class="nav-link active" onclick="showTab('overview')"><i class="bi bi-grid me-1"></i>Overview</button></li>
+        <li class="nav-item"><button class="nav-link" onclick="showTab('iq')"><i class="bi bi-soundwave me-1"></i>I/Q Signals</button></li>
+        <li class="nav-item"><button class="nav-link" onclick="showTab('distribution')"><i class="bi bi-bar-chart me-1"></i>Distribution</button></li>
+        <li class="nav-item"><button class="nav-link" onclick="showTab('constellation')"><i class="bi bi-scatter-chart me-1"></i>Constellation</button></li>
+    </ul>
+
+    <!-- Overview Tab -->
+    <div id="tab-overview">
+        <div class="row g-3 mb-4" id="statsRow"></div>
+        <div class="row g-3">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">Sample Count per Modulation × SNR (Heatmap)</div>
+                    <div class="card-body"><div id="heatmapChart" style="height:380px;"></div></div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">Modulation Distribution</div>
+                    <div class="card-body"><div id="pieChart" style="height:380px;"></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- IQ Signals Tab -->
+    <div id="tab-iq" style="display:none;">
+        <div class="row g-3 mb-3">
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">Select Modulation</div>
+                    <div class="card-body">
+                        <select class="form-select" id="modSelect" onchange="updateIQPlot()"></select>
+                        <div class="mt-3" style="font-size:0.85rem;color:#64748b;">
+                            <p>Each signal is represented as a 2×128 array:</p>
+                            <div class="d-flex gap-2">
+                                <span class="badge bg-primary">I Channel</span>
+                                <span class="badge bg-info">Q Channel</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">I/Q Time Domain Signal</div>
+                    <div class="card-body"><div id="iqChart" style="height:350px;"></div></div>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">All Modulations - I/Q Preview (SNR = 0 dB)</div>
+            <div class="card-body"><div id="allIQChart" style="height:400px;"></div></div>
+        </div>
+    </div>
+
+    <!-- Distribution Tab -->
+    <div id="tab-distribution" style="display:none;">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">Samples per Modulation Class</div>
+                    <div class="card-body"><div id="barModChart" style="height:350px;"></div></div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">Samples per SNR Level</div>
+                    <div class="card-body"><div id="barSNRChart" style="height:350px;"></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Constellation Tab -->
+    <div id="tab-constellation" style="display:none;">
+        <div class="row g-3 mb-3">
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">Select Modulation</div>
+                    <div class="card-body">
+                        <select class="form-select" id="constModSelect" onchange="updateConstellation()"></select>
+                        <div class="mt-2" style="font-size:0.8rem;color:#64748b;">
+                            Constellation diagram shows I vs Q scatter plot at SNR=0dB
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">Constellation Diagram (I vs Q)</div>
+                    <div class="card-body"><div id="constChart" style="height:380px;"></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="errorState" style="display:none;">
+    <div class="card">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-exclamation-triangle" style="font-size:3rem;color:#f59e0b;"></i>
+            <h5 class="mt-3">Dataset Not Yet Preprocessed</h5>
+            <p class="text-muted" id="errorMsg">Please preprocess the dataset first to enable visualization.</p>
+            <a href="{{ url_for('admin_preprocess', did=dataset.id) }}" class="btn btn-primary me-2">
+                <i class="bi bi-gear me-1"></i>Run Preprocessing
+            </a>
+            <div class="mt-3 p-3" style="background:#f8fafc;border-radius:8px;text-align:left;max-width:400px;margin:1rem auto 0;">
+                <div style="font-size:0.8rem;color:#64748b;font-weight:600;">Note on Demo Mode</div>
+                <div style="font-size:0.8rem;color:#94a3b8;margin-top:0.25rem;">
+                    If no actual dataset file is present, visualization will show simulated data representative of RadioML 2016.10A structure.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let vizData = null;
+const COLORS = ['#6366f1','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#84cc16','#f97316','#ec4899','#14b8a6'];
+
+fetch('/admin/visualize/data/{{ dataset.id }}')
+    .then(r => r.json())
+    .then(data => {
+        document.getElementById('loadingState').style.display = 'none';
+        if (data.error) {
+            // Show demo/simulated data
+            data = generateSimulatedData();
+        }
+        vizData = data;
+        document.getElementById('vizContent').style.display = 'block';
+        buildOverview();
+        buildIQSelectors();
+        buildDistribution();
+    })
+    .catch(() => {
+        document.getElementById('loadingState').style.display = 'none';
+        vizData = generateSimulatedData();
+        document.getElementById('vizContent').style.display = 'block';
+        buildOverview();
+        buildIQSelectors();
+        buildDistribution();
+    });
+
+function generateSimulatedData() {
+    const mods = ['8PSK','AM-DSB','AM-SSB','BPSK','CPFSK','GFSK','PAM4','QAM16','QAM64','QPSK','WBFM'];
+    const snrs = ['-20','-18','-16','-14','-12','-10','-8','-6','-4','-2','0','2','4','6','8','10','12','14','16','18'];
+    const counts = {};
+    const iq_samples = {};
+    mods.forEach(m => {
+        counts[m] = {};
+        snrs.forEach(s => { counts[m][s] = 1000; });
+        const t = Array.from({length:128}, (_,i) => i/128);
+        const freq = Math.random()*5+2;
+        const I = t.map(x => Math.cos(2*Math.PI*freq*x + Math.random()*0.5) + (Math.random()-0.5)*0.2);
+        const Q = t.map(x => Math.sin(2*Math.PI*freq*x + Math.random()*0.5) + (Math.random()-0.5)*0.2);
+        iq_samples[m] = {I, Q};
+    });
+    return {modulations: mods, snrs, counts, iq_samples};
+}
+
+function buildOverview() {
+    const d = vizData;
+    const totalSamples = d.modulations.reduce((s,m) => s + d.snrs.reduce((a,snr) => a + (d.counts[m][snr]||0), 0), 0);
+    document.getElementById('statsRow').innerHTML = [
+        ['Total Samples', totalSamples.toLocaleString(), 'bg-gradient-primary', 'bi-database'],
+        ['Modulations', d.modulations.length, 'bg-gradient-info', 'bi-tags'],
+        ['SNR Levels', d.snrs.length, 'bg-gradient-success', 'bi-soundwave'],
+        ['Signal Shape', '2 × 128', 'bg-gradient-warning', 'bi-layers']
+    ].map(([label,val,cls,icon]) => `
+        <div class="col-6 col-md-3">
+            <div class="stat-card ${cls}">
+                <div class="d-flex justify-content-between">
+                    <div><div class="stat-label">${label}</div><div class="stat-value" style="font-size:1.5rem;">${val}</div></div>
+                    <i class="bi ${icon} stat-icon"></i>
+                </div>
+            </div>
+        </div>
+    `).join('');
+
+    // Heatmap
+    const z = d.modulations.map(m => d.snrs.map(snr => d.counts[m][snr]||0));
+    Plotly.newPlot('heatmapChart', [{
+        z, x: d.snrs.map(s => s+'dB'), y: d.modulations,
+        type: 'heatmap', colorscale: 'Viridis',
+        text: z.map(row => row.map(v => v.toLocaleString())),
+        hovertemplate: '<b>%{y}</b> @ %{x}<br>Samples: %{text}<extra></extra>'
+    }], {
+        margin: {t:10,r:10,b:60,l:70},
+        xaxis: {title:'SNR (dB)'},
+        yaxis: {title:'Modulation'},
+        paper_bgcolor:'transparent', plot_bgcolor:'transparent'
+    }, {responsive:true, displayModeBar:false});
+
+    // Pie
+    const totals = d.modulations.map(m => d.snrs.reduce((s,snr) => s+(d.counts[m][snr]||0), 0));
+    Plotly.newPlot('pieChart', [{
+        values: totals, labels: d.modulations, type: 'pie',
+        marker: {colors: COLORS},
+        textinfo: 'label+percent',
+        hovertemplate: '<b>%{label}</b><br>%{value:,} samples<extra></extra>'
+    }], {
+        margin: {t:10,r:10,b:10,l:10},
+        paper_bgcolor:'transparent', showlegend:false
+    }, {responsive:true, displayModeBar:false});
+}
+
+function buildIQSelectors() {
+    const opts = vizData.modulations.filter(m => vizData.iq_samples[m]);
+    ['modSelect','constModSelect'].forEach(id => {
+        document.getElementById(id).innerHTML = opts.map(m => `<option value="${m}">${m}</option>`).join('');
+    });
+    updateIQPlot();
+    updateAllIQ();
+}
+
+function updateIQPlot() {
+    const mod = document.getElementById('modSelect').value;
+    const sig = vizData.iq_samples[mod];
+    if (!sig) return;
+    const t = Array.from({length:128}, (_,i) => i);
+    Plotly.newPlot('iqChart', [
+        {x:t, y:sig.I, name:'I (In-phase)', line:{color:'#6366f1',width:2}, type:'scatter'},
+        {x:t, y:sig.Q, name:'Q (Quadrature)', line:{color:'#0ea5e9',width:2}, type:'scatter'}
+    ], {
+        margin:{t:10,r:10,b:40,l:50},
+        xaxis:{title:'Sample Index'}, yaxis:{title:'Amplitude'},
+        legend:{orientation:'h',y:-0.15},
+        paper_bgcolor:'transparent', plot_bgcolor:'transparent'
+    }, {responsive:true, displayModeBar:false});
+    updateConstellation();
+}
+
+function updateAllIQ() {
+    const mods = Object.keys(vizData.iq_samples).slice(0,6);
+    const traces = [];
+    mods.forEach((m, idx) => {
+        const sig = vizData.iq_samples[m];
+        if (!sig) return;
+        const t = Array.from({length:128}, (_,i) => i);
+        traces.push({x:t, y:sig.I.map(v => v+idx*2.5), name:m, line:{color:COLORS[idx],width:1.5}, type:'scatter', legendgroup:m});
+    });
+    Plotly.newPlot('allIQChart', traces, {
+        margin:{t:10,r:10,b:40,l:50},
+        xaxis:{title:'Sample Index'}, yaxis:{title:'Amplitude (offset per mod)'},
+        legend:{orientation:'h',y:-0.15},
+        paper_bgcolor:'transparent', plot_bgcolor:'transparent'
+    }, {responsive:true, displayModeBar:false});
+}
+
+function updateConstellation() {
+    const mod = document.getElementById('constModSelect')?.value || document.getElementById('modSelect').value;
+    const sig = vizData.iq_samples[mod];
+    if (!sig) return;
+    Plotly.newPlot('constChart', [{
+        x: sig.I, y: sig.Q, mode:'markers',
+        marker:{color:'#6366f1', size:6, opacity:0.7,
+                line:{color:'#4f46e5',width:1}},
+        type:'scatter', name:mod,
+        hovertemplate:'I: %{x:.3f}<br>Q: %{y:.3f}<extra></extra>'
+    }], {
+        margin:{t:10,r:10,b:50,l:60},
+        xaxis:{title:'In-phase (I)', zeroline:true, zerolinecolor:'#cbd5e1'},
+        yaxis:{title:'Quadrature (Q)', zeroline:true, zerolinecolor:'#cbd5e1'},
+        paper_bgcolor:'transparent', plot_bgcolor:'transparent'
+    }, {responsive:true, displayModeBar:false});
+}
+
+function buildDistribution() {
+    const d = vizData;
+    const modTotals = d.modulations.map(m => d.snrs.reduce((s,snr) => s+(d.counts[m][snr]||0), 0));
+    Plotly.newPlot('barModChart', [{
+        x: d.modulations, y: modTotals, type:'bar',
+        marker:{color:COLORS, opacity:0.85},
+        hovertemplate:'<b>%{x}</b><br>%{y:,} samples<extra></extra>'
+    }], {
+        margin:{t:10,r:10,b:60,l:60},
+        xaxis:{title:'Modulation', tickangle:-30},
+        yaxis:{title:'Sample Count'},
+        paper_bgcolor:'transparent', plot_bgcolor:'transparent'
+    }, {responsive:true, displayModeBar:false});
+
+    const snrTotals = d.snrs.map(snr => d.modulations.reduce((s,m) => s+(d.counts[m][snr]||0), 0));
+    Plotly.newPlot('barSNRChart', [{
+        x: d.snrs.map(s => s+'dB'), y: snrTotals, type:'bar',
+        marker:{color:'#0ea5e9', opacity:0.85},
+        hovertemplate:'SNR: %{x}<br>%{y:,} samples<extra></extra>'
+    }], {
+        margin:{t:10,r:10,b:60,l:60},
+        xaxis:{title:'SNR Level (dB)', tickangle:-30},
+        yaxis:{title:'Sample Count'},
+        paper_bgcolor:'transparent', plot_bgcolor:'transparent'
+    }, {responsive:true, displayModeBar:false});
+}
+
+function showTab(tab) {
+    ['overview','iq','distribution','constellation'].forEach(t => {
+        document.getElementById('tab-'+t).style.display = t===tab ? 'block' : 'none';
+    });
+    document.querySelectorAll('#vizTabs .nav-link').forEach((btn,i) => {
+        btn.classList.toggle('active', i === ['overview','iq','distribution','constellation'].indexOf(tab));
+    });
+    if (tab === 'iq') { updateIQPlot(); updateAllIQ(); }
+    if (tab === 'constellation') updateConstellation();
+}
+</script>
+{% endblock %}

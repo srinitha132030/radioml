@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+{% block title %}Train Model{% endblock %}
+{% block page_title %}Train Model{% endblock %}
+{% block content %}
+<div class="row g-3">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header d-flex align-items-center gap-2">
+                <i class="bi bi-sliders text-primary"></i> Training Configuration
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Model Name</label>
+                    <input type="text" class="form-control" id="modelName" placeholder="e.g., CNN_RadioML_v1" value="RadioML_CNN_v1">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Dataset</label>
+                    <select class="form-select" id="datasetId">
+                        {% if datasets %}
+                            {% for ds in datasets %}
+                            <option value="{{ ds.id }}">{{ ds.name }}</option>
+                            {% endfor %}
+                        {% else %}
+                            <option value="">No datasets available</option>
+                        {% endif %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Architecture</label>
+                    <div class="row g-2" id="archButtons">
+                        {% for arch in architectures %}
+                        <div class="col-6">
+                            <div class="arch-btn {% if loop.first %}selected{% endif %}" data-arch="{{ arch }}" onclick="selectArch(this)">
+                                <div class="arch-icon">
+                                    {% if arch == 'CNN' %}🔲{% elif arch == 'LSTM' %}🔄{% elif arch == 'CNN-LSTM' %}⚡{% else %}🏗️{% endif %}
+                                </div>
+                                <div class="arch-name">{{ arch }}</div>
+                                <div class="arch-desc" style="font-size:0.65rem;color:#94a3b8;">
+                                    {% if arch == 'CNN' %}Convolutional NN{% elif arch == 'LSTM' %}Recurrent NN{% elif arch == 'CNN-LSTM' %}Hybrid{% else %}Deep Residual{% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Epochs: <span id="epochVal">20</span></label>
+                    <input type="range" class="form-range" id="epochs" min="5" max="100" step="5" value="20"
+                           oninput="document.getElementById('epochVal').textContent=this.value">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Batch Size</label>
+                    <select class="form-select" id="batchSize">
+                        <option value="32">32</option>
+                        <option value="64" selected>64</option>
+                        <option value="128">128</option>
+                        <option value="256">256</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label fw-semibold">Learning Rate</label>
+                    <select class="form-select" id="lr">
+                        <option value="0.001" selected>0.001</option>
+                        <option value="0.0001">0.0001</option>
+                        <option value="0.01">0.01</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary w-100" id="trainBtn" onclick="startTraining()">
+                    <i class="bi bi-play-circle me-2"></i>Start Training
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <!-- Training Progress -->
+        <div class="card mb-3" id="progressCard" style="display:none;">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <span><i class="bi bi-cpu text-primary me-2"></i>Training Progress</span>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-warning text-dark" id="statusBadge">Training</span>
+                    <span id="epochCounter" style="font-size:0.8rem;color:#64748b;"></span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="progress mb-3" style="height:12px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                         id="trainProgress" style="width:0%"></div>
+                </div>
+                <div class="row g-2 mb-3" id="liveMetrics">
+                    <div class="col-3">
+                        <div class="text-center" style="background:#f8fafc;border-radius:8px;padding:0.5rem;">
+                            <div style="font-size:0.65rem;color:#94a3b8;text-transform:uppercase;">Loss</div>
+                            <div style="font-weight:700;color:#ef4444;" id="liveL">-</div>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="text-center" style="background:#f8fafc;border-radius:8px;padding:0.5rem;">
+                            <div style="font-size:0.65rem;color:#94a3b8;text-transform:uppercase;">Acc</div>
+                            <div style="font-weight:700;color:#10b981;" id="liveA">-</div>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="text-center" style="background:#f8fafc;border-radius:8px;padding:0.5rem;">
+                            <div style="font-size:0.65rem;color:#94a3b8;text-transform:uppercase;">Val Loss</div>
+                            <div style="font-weight:700;color:#f59e0b;" id="liveVL">-</div>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="text-center" style="background:#f8fafc;border-radius:8px;padding:0.5rem;">
+                            <div style="font-size:0.65rem;color:#94a3b8;text-transform:uppercase;">Val Acc</div>
+                            <div style="font-weight:700;color:#6366f1;" id="liveVA">-</div>
+                        </div>
+                    </div>
+                </div>
+                <canvas id="trainChart" height="180"></canvas>
+            </div>
+        </div>
+
+        <!-- Results -->
+        <div class="card" id="resultsCard" style="display:none;">
+            <div class="card-header d-flex align-items-center gap-2">
+                <i class="bi bi-trophy text-warning"></i> Training Complete
+            </div>
+            <div class="card-body" id="resultsBody"></div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="card" id="instructionCard">
+            <div class="card-header d-flex align-items-center gap-2">
+                <i class="bi bi-info-circle text-primary"></i> Architecture Details
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    {% for arch, desc in [
+                        ('CNN', 'Convolutional Neural Network - Extracts local features from I/Q signals using 1D convolutions. Best for identifying frequency-domain patterns.'),
+                        ('LSTM', 'Long Short-Term Memory - Captures temporal dependencies in the signal sequence. Excellent for time-varying modulation patterns.'),
+                        ('CNN-LSTM', 'Hybrid CNN-LSTM - Combines spatial feature extraction (CNN) with temporal modeling (LSTM). State-of-the-art for AMC.'),
+                        ('ResNet', 'Residual Network - Deep architecture with skip connections to avoid vanishing gradients. High accuracy on complex signals.')
+                    ] %}
+                    <div class="col-md-6">
+                        <div style="background:#f8fafc;border-radius:10px;padding:1rem;">
+                            <div class="fw-semibold mb-1" style="font-size:0.9rem;">{{ arch }}</div>
+                            <div style="font-size:0.8rem;color:#64748b;">{{ desc }}</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let selectedArch = 'CNN';
+let trainChart = null;
+
+const archStyles = `
+    .arch-btn {
+        background:#f8fafc; border:2px solid var(--border); border-radius:10px;
+        padding:0.75rem; text-align:center; cursor:pointer; transition:all 0.2s;
+    }
+    .arch-btn:hover { border-color:var(--primary); background:#ede9fe; }
+    .arch-btn.selected { border-color:var(--primary); background:#ede9fe; }
+    .arch-icon { font-size:1.5rem; margin-bottom:4px; }
+    .arch-name { font-weight:600; font-size:0.85rem; }
+`;
+document.head.insertAdjacentHTML('beforeend', `<style>${archStyles}</style>`);
+
+function selectArch(el) {
+    document.querySelectorAll('.arch-btn').forEach(b => b.classList.remove('selected'));
+    el.classList.add('selected');
+    selectedArch = el.dataset.arch;
+}
+
+function startTraining() {
+    const datasetId = document.getElementById('datasetId').value;
+    if (!datasetId) { alert('Please select a dataset first!'); return; }
+
+    const btn = document.getElementById('trainBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Initializing...';
+
+    document.getElementById('progressCard').style.display = 'block';
+    document.getElementById('instructionCard').style.display = 'none';
+    document.getElementById('resultsCard').style.display = 'none';
+
+    // Setup chart
+    if (trainChart) trainChart.destroy();
+    const ctx = document.getElementById('trainChart').getContext('2d');
+    trainChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                {label:'Train Loss', data:[], borderColor:'#ef4444', backgroundColor:'transparent', tension:0.4},
+                {label:'Val Loss', data:[], borderColor:'#f59e0b', backgroundColor:'transparent', tension:0.4, borderDash:[5,5]},
+                {label:'Train Acc', data:[], borderColor:'#10b981', backgroundColor:'transparent', tension:0.4, yAxisID:'y1'},
+                {label:'Val Acc', data:[], borderColor:'#6366f1', backgroundColor:'transparent', tension:0.4, borderDash:[5,5], yAxisID:'y1'}
+            ]
+        },
+        options: {
+            responsive:true, animation:{duration:200},
+            plugins:{legend:{position:'bottom',labels:{boxWidth:20,padding:10}}},
+            scales:{
+                y:{type:'linear',position:'left',title:{display:true,text:'Loss'}},
+                y1:{type:'linear',position:'right',title:{display:true,text:'Accuracy'},min:0,max:1,grid:{drawOnChartArea:false}}
+            }
+        }
+    });
+
+    const epochs = parseInt(document.getElementById('epochs').value);
+    fetch('/admin/train/run', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            dataset_id: datasetId,
+            architecture: selectedArch,
+            epochs: epochs,
+            model_name: document.getElementById('modelName').value
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) { alert(data.error); return; }
+        // Animate training display
+        let i = 0;
+        const interval = setInterval(() => {
+            if (i >= data.logs.length) {
+                clearInterval(interval);
+                showResults(data);
+                return;
+            }
+            const log = data.logs[i];
+            document.getElementById('epochCounter').textContent = `Epoch ${log.epoch}/${epochs}`;
+            document.getElementById('trainProgress').style.width = `${(log.epoch/epochs*100).toFixed(0)}%`;
+            document.getElementById('liveL').textContent = log.loss.toFixed(4);
+            document.getElementById('liveA').textContent = (log.accuracy*100).toFixed(1)+'%';
+            document.getElementById('liveVL').textContent = log.val_loss.toFixed(4);
+            document.getElementById('liveVA').textContent = (log.val_accuracy*100).toFixed(1)+'%';
+            trainChart.data.labels.push(`E${log.epoch}`);
+            trainChart.data.datasets[0].data.push(log.loss);
+            trainChart.data.datasets[1].data.push(log.val_loss);
+            trainChart.data.datasets[2].data.push(log.accuracy);
+            trainChart.data.datasets[3].data.push(log.val_accuracy);
+            trainChart.update();
+            i++;
+        }, 100);
+    })
+    .catch(err => {
+        alert('Training failed: ' + err);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-play-circle me-2"></i>Start Training';
+    });
+}
+
+function showResults(data) {
+    document.getElementById('statusBadge').className = 'badge bg-success';
+    document.getElementById('statusBadge').textContent = 'Complete';
+    document.getElementById('trainProgress').style.width = '100%';
+    document.getElementById('trainProgress').className = 'progress-bar bg-success';
+
+    document.getElementById('resultsCard').style.display = 'block';
+    document.getElementById('resultsBody').innerHTML = `
+        <div class="row g-3 mb-3">
+            <div class="col-md-4">
+                <div style="background:linear-gradient(135deg,#10b981,#059669);color:#fff;border-radius:12px;padding:1.25rem;text-align:center;">
+                    <div style="font-size:0.75rem;opacity:0.85;text-transform:uppercase;">Final Accuracy</div>
+                    <div style="font-size:2.5rem;font-weight:800;">${(data.final_accuracy*100).toFixed(1)}%</div>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div style="background:#f8fafc;border-radius:12px;padding:1.25rem;">
+                    <div class="fw-semibold mb-2">Training Summary</div>
+                    <div class="d-flex flex-wrap gap-2" style="font-size:0.85rem;">
+                        <span><strong>Model ID:</strong> ${data.model_id}</span>
+                        <span><strong>Architecture:</strong> ${selectedArch}</span>
+                        <span><strong>Epochs:</strong> ${data.logs.length}</span>
+                        <span><strong>Status:</strong> <span class="text-success">Saved ✓</span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="/admin/model/evaluate/${data.model_id}" class="btn btn-primary">
+                <i class="bi bi-graph-up me-1"></i>View Performance
+            </a>
+            <a href="/admin/models" class="btn btn-outline-secondary">
+                <i class="bi bi-collection me-1"></i>All Models
+            </a>
+            <button class="btn btn-outline-primary" onclick="location.reload()">
+                <i class="bi bi-plus-circle me-1"></i>Train Another
+            </button>
+        </div>
+    `;
+
+    document.getElementById('trainBtn').innerHTML = '<i class="bi bi-check-circle me-2"></i>Training Complete';
+    document.getElementById('trainBtn').className = 'btn btn-success w-100';
+}
+</script>
+{% endblock %}

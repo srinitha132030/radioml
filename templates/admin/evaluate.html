@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% block title %}Model Evaluation{% endblock %}
+{% block page_title %}Model Performance Evaluation{% endblock %}
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.26.0/plotly.min.js"></script>
+{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-4">
+    <div>
+        <h5 class="mb-0 fw-bold">{{ model.name }}</h5>
+        <div style="font-size:0.8rem;color:#64748b;">
+            <span class="badge-mod">{{ model.architecture }}</span>
+            {% if model.accuracy %}<span class="ms-2 text-success fw-bold">{{ "%.1f"|format(model.accuracy * 100) }}% accuracy</span>{% endif %}
+        </div>
+    </div>
+    <a href="{{ url_for('admin_models') }}" class="btn btn-sm btn-outline-secondary ms-auto">
+        <i class="bi bi-arrow-left me-1"></i>Back
+    </a>
+</div>
+
+<!-- Tabs -->
+<ul class="nav nav-pills mb-4 gap-1" id="evalTabs">
+    <li class="nav-item"><button class="nav-link active" onclick="showEvalTab('curves')"><i class="bi bi-graph-up me-1"></i>Training Curves</button></li>
+    <li class="nav-item"><button class="nav-link" onclick="showEvalTab('classes')"><i class="bi bi-tags me-1"></i>Per-Class Accuracy</button></li>
+    <li class="nav-item"><button class="nav-link" onclick="showEvalTab('snr')"><i class="bi bi-soundwave me-1"></i>SNR Analysis</button></li>
+    <li class="nav-item"><button class="nav-link" onclick="showEvalTab('confusion')"><i class="bi bi-grid me-1"></i>Confusion Matrix</button></li>
+</ul>
+
+<!-- Training Curves -->
+<div id="tab-curves">
+    <div class="row g-3">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">Loss Curves</div>
+                <div class="card-body"><div id="lossChart" style="height:320px;"></div></div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">Summary Stats</div>
+                <div class="card-body">
+                    {% if logs %}
+                    {% set last = logs[-1] %}
+                    <div class="d-flex flex-column gap-2">
+                        <div style="background:linear-gradient(135deg,#10b981,#059669);color:#fff;border-radius:10px;padding:1rem;text-align:center;">
+                            <div style="font-size:0.75rem;opacity:0.85;">Final Val Accuracy</div>
+                            <div style="font-size:2rem;font-weight:800;">{{ "%.1f"|format(last['val_accuracy']*100) }}%</div>
+                        </div>
+                        {% for label, val, color in [
+                            ('Final Train Loss', "%.4f"|format(last['loss']), '#ef4444'),
+                            ('Final Val Loss', "%.4f"|format(last['val_loss']), '#f59e0b'),
+                            ('Final Train Acc', "%.1f%%"|format(last['accuracy']*100), '#10b981'),
+                            ('Total Epochs', logs|length, '#6366f1')
+                        ] %}
+                        <div class="d-flex justify-content-between align-items-center p-2" style="background:#f8fafc;border-radius:8px;font-size:0.85rem;">
+                            <span class="text-muted">{{ label }}</span>
+                            <strong style="color:{{ color }};">{{ val }}</strong>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center">No training logs available</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">Accuracy Curves</div>
+                <div class="card-body"><div id="accChart" style="height:280px;"></div></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Per-Class Accuracy -->
+<div id="tab-classes" style="display:none;">
+    <div class="row g-3">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">Per-Class Accuracy</div>
+                <div class="card-body"><div id="classAccChart" style="height:380px;"></div></div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">Accuracy Rankings</div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table mb-0">
+                            <thead class="table-light"><tr><th>Modulation</th><th>Accuracy</th></tr></thead>
+                            <tbody id="classRankings"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SNR Analysis -->
+<div id="tab-snr" style="display:none;">
+    <div class="row g-3">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">Classification Accuracy vs SNR</div>
+                <div class="card-body"><div id="snrChart" style="height:380px;"></div></div>
+            </div>
+        </div>
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">SNR Performance Table</div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table mb-0">
+                            <thead class="table-light"><tr><th>SNR (dB)</th><th>Accuracy</th><th>Performance</th></tr></thead>
+                            <tbody id="snrTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Confusion Matrix -->
+<div id="tab-confusion" style="display:none;">
+    <div class="card">
+        <div class="card-header">Confusion Matrix</div>
+        <div class="card-body"><div id="confusionChart" style="height:550px;"></div></div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const MODS = {{ modulations | tojson }};
+const metrics = {{ metrics | tojson }};
+const logData = [
+    {% for log in logs %}
+    {epoch:{{ log['epoch'] }},loss:{{ log['loss'] }},accuracy:{{ log['accuracy'] }},val_loss:{{ log['val_loss'] }},val_accuracy:{{ log['val_accuracy'] }}},
+    {% endfor %}
+];
+
+// Training curves
+if (logData.length > 0) {
+    const epochs = logData.map(l => l.epoch);
+    Plotly.newPlot('lossChart', [
+        {x:epochs, y:logData.map(l=>l.loss), name:'Train Loss', line:{color:'#ef4444',width:2}, type:'scatter'},
+        {x:epochs, y:logData.map(l=>l.val_loss), name:'Val Loss', line:{color:'#f59e0b',width:2,dash:'dash'}, type:'scatter'}
+    ], {
+        margin:{t:10,r:10,b:40,l:60},
+        xaxis:{title:'Epoch'}, yaxis:{title:'Loss'},
+        legend:{orientation:'h',y:-0.2},
+        paper_bgcolor:'transparent', plot_bgcolor:'transparent'
+    }, {responsive:true, displayModeBar:false});
+
+    Plotly.newPlot('accChart', [
+        {x:epochs, y:logData.map(l=>l.accuracy), name:'Train Acc', line:{color:'#10b981',width:2}, type:'scatter'},
+        {x:epochs, y:logData.map(l=>l.val_accuracy), name:'Val Acc', line:{color:'#6366f1',width:2,dash:'dash'}, type:'scatter'}
+    ], {
+        margin:{t:10,r:10,b:40,l:60},
+        xaxis:{title:'Epoch'}, yaxis:{title:'Accuracy',tickformat:'.0%'},
+        legend:{orientation:'h',y:-0.2},
+        paper_bgcolor:'transparent', plot_bgcolor:'transparent'
+    }, {responsive:true, displayModeBar:false});
+}
+
+// Per-class accuracy
+if (metrics.class_accuracy) {
+    const ca = metrics.class_accuracy;
+    const mods = Object.keys(ca).sort((a,b) => ca[b]-ca[a]);
+    const vals = mods.map(m => ca[m]);
+    const colors = vals.map(v => v > 0.9 ? '#10b981' : v > 0.8 ? '#f59e0b' : '#ef4444');
+
+    Plotly.newPlot('classAccChart', [{
+        x: mods, y: vals, type:'bar',
+        marker:{color:colors, opacity:0.85},
+        hovertemplate:'<b>%{x}</b><br>Accuracy: %{y:.1%}<extra></extra>'
+    }], {
+        margin:{t:10,r:10,b:80,l:60},
+        xaxis:{title:'Modulation', tickangle:-30},
+        yaxis:{title:'Accuracy',tickformat:'.0%',range:[0,1]},
+        shapes:[{type:'line',x0:-0.5,x1:mods.length-0.5,y0:0.9,y1:0.9,
+                 line:{color:'#10b981',width:1,dash:'dot'},opacity:0.6}],
+        paper_bgcolor:'transparent', plot_bgcolor:'transparent'
+    }, {responsive:true, displayModeBar:false});
+
+    const tbody = document.getElementById('classRankings');
+    mods.forEach((m,i) => {
+        const acc = ca[m];
+        const color = acc > 0.9 ? 'success' : acc > 0.8 ? 'warning' : 'danger';
+        tbody.innerHTML += `<tr>
+            <td><span class="badge-mod">${m}</span></td>
+            <td><span class="text-${color} fw-bold">${(acc*100).toFixed(1)}%</span></td>
+        </tr>`;
+    });
+}
+
+// SNR analysis
+if (metrics.snr_accuracy) {
+    const sa = metrics.snr_accuracy;
+    const snrs = Object.keys(sa).sort((a,b) => parseFloat(a)-parseFloat(b));
+    const vals = snrs.map(s => sa[s]);
+
+    Plotly.newPlot('snrChart', [{
+        x: snrs.map(s=>parseFloat(s)), y: vals, type:'scatter', mode:'lines+markers',
+        line:{color:'#6366f1',width:2.5},
+        marker:{color:'#6366f1',size:8,line:{color:'#fff',width:2}},
+        fill:'tozeroy', fillcolor:'rgba(99,102,241,0.1)',
+        hovertemplate:'SNR: %{x} dB<br>Accuracy: %{y:.1%}<extra></extra>'
+    }], {
+        margin:{t:10,r:10,b:50,l:70},
+        xaxis:{title:'SNR (dB)',dtick:2},
+        yaxis:{title:'Classification Accuracy',tickformat:'.0%',range:[0,1]},
+        shapes:[{type:'line',x0:-20,x1:18,y0:0.5,y1:0.5,
+                 line:{color:'#94a3b8',width:1,dash:'dot'}}],
+        paper_bgcolor:'transparent', plot_bgcolor:'transparent'
+    }, {responsive:true, displayModeBar:false});
+
+    const snrTbody = document.getElementById('snrTable');
+    snrs.forEach(s => {
+        const acc = sa[s];
+        const color = acc > 0.8 ? 'success' : acc > 0.5 ? 'warning' : 'danger';
+        const pct = Math.round(acc*100);
+        snrTbody.innerHTML += `<tr>
+            <td><strong>${s} dB</strong></td>
+            <td class="text-${color} fw-bold">${(acc*100).toFixed(1)}%</td>
+            <td><div class="progress" style="height:6px;"><div class="progress-bar bg-${color}" style="width:${pct}%"></div></div></td>
+        </tr>`;
+    });
+}
+
+// Confusion matrix
+if (metrics.confusion_matrix) {
+    const cm = metrics.confusion_matrix;
+    const normalized = cm.map(row => {
+        const total = row.reduce((s,v) => s+v, 0);
+        return row.map(v => total > 0 ? v/total : 0);
+    });
+    const text = cm.map(row => row.map(v => v.toString()));
+
+    Plotly.newPlot('confusionChart', [{
+        z: normalized, x: MODS, y: MODS, type:'heatmap',
+        colorscale:'Blues', showscale:true,
+        text: text, texttemplate:'%{text}',
+        hovertemplate:'True: %{y}<br>Pred: %{x}<br>Count: %{text}<br>Rate: %{z:.1%}<extra></extra>'
+    }], {
+        margin:{t:10,r:100,b:100,l:90},
+        xaxis:{title:'Predicted', tickangle:-30},
+        yaxis:{title:'True Label', autorange:'reversed'},
+        paper_bgcolor:'transparent'
+    }, {responsive:true, displayModeBar:false});
+}
+
+function showEvalTab(tab) {
+    ['curves','classes','snr','confusion'].forEach(t => {
+        document.getElementById('tab-'+t).style.display = t===tab ? 'block' : 'none';
+    });
+    document.querySelectorAll('#evalTabs .nav-link').forEach((btn,i) => {
+        btn.classList.toggle('active', i === ['curves','classes','snr','confusion'].indexOf(tab));
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Models{% endblock %}
+{% block page_title %}Trained Models{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div style="color:#64748b;font-size:0.875rem;">{{ models|length }} model(s) found</div>
+    <a href="{{ url_for('admin_train') }}" class="btn btn-primary btn-sm">
+        <i class="bi bi-plus-circle me-1"></i> Train New Model
+    </a>
+</div>
+
+{% if models %}
+<div class="row g-3">
+    {% for m in models %}
+    <div class="col-md-6 col-lg-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-start justify-content-between mb-3">
+                    <div>
+                        <div style="font-size:1.75rem;margin-bottom:0.25rem;">
+                            {% if m.architecture == 'CNN' %}🔲
+                            {% elif m.architecture == 'LSTM' %}🔄
+                            {% elif m.architecture == 'CNN-LSTM' %}⚡
+                            {% else %}🏗️{% endif %}
+                        </div>
+                        <h6 class="fw-bold mb-1">{{ m.name }}</h6>
+                        <span class="badge-mod">{{ m.architecture }}</span>
+                    </div>
+                    <span class="badge bg-{% if m.status == 'ready' %}success{% else %}warning text-dark{% endif %}">
+                        {{ m.status }}
+                    </span>
+                </div>
+
+                {% if m.accuracy %}
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span style="font-size:0.75rem;color:#64748b;">Accuracy</span>
+                        <span style="font-weight:700;color:#10b981;">{{ "%.1f"|format(m.accuracy * 100) }}%</span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar bg-success" style="width:{{ m.accuracy * 100 }}%"></div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div style="font-size:0.8rem;color:#64748b;margin-bottom:1rem;">
+                    <div class="d-flex justify-content-between">
+                        <span>Dataset</span>
+                        <strong>{{ m.dataset_name or 'N/A' }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>Trained</span>
+                        <strong>{{ m.trained_at[:10] if m.trained_at else 'N/A' }}</strong>
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2">
+                    {% if m.status == 'ready' %}
+                    <a href="{{ url_for('admin_evaluate', mid=m.id) }}" class="btn btn-sm btn-primary flex-fill">
+                        <i class="bi bi-graph-up me-1"></i>Evaluate
+                    </a>
+                    {% endif %}
+                    <form method="POST" action="{{ url_for('admin_delete_model', mid=m.id) }}"
+                          onsubmit="return confirm('Delete this model?')">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card">
+    <div class="card-body text-center py-5">
+        <i class="bi bi-cpu" style="font-size:4rem;color:#cbd5e1;"></i>
+        <h5 class="mt-3 text-muted">No models trained yet</h5>
+        <p class="text-muted">Upload a dataset and train your first model.</p>
+        <a href="{{ url_for('admin_train') }}" class="btn btn-primary">
+            <i class="bi bi-cpu me-2"></i>Train Model
+        </a>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
